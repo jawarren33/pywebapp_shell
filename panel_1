@@ -1,0 +1,146 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+#requirements
+import hvplot.pandas
+import holoviews as hv
+import panel as pn
+from panel.interact import interact
+import pandas as pd
+from datetime import date
+
+pn.extension('tabulator', sizing_mode = "stretch_width")
+hv.extension("bokeh")
+
+
+#return env
+def environment():
+    try:
+        get_ipython()
+        return "notebook"
+    except:
+        return "server"
+environment()
+
+#Load local dataset
+df_orisol = pd.read_csv('/Users/jamie.warren/Downloads/Orisol Rework (5).csv', header = 0).drop(['Repeat?'], axis = 1)
+df_orisol = df_orisol.dropna()
+
+
+df_orisol.head()
+
+
+#process data
+#sample data below
+df_orisol['Time Recorded'] = pd.to_datetime(df_orisol['Time Recorded'])
+df_orisol['Day'] = df_orisol['Time Recorded'].dt.day
+df_orisol['Count of Rework'] = df_orisol['id']
+df_orisol_d = df_orisol.groupby([df_orisol['Value Stream'], df_orisol['Time Recorded'].dt.date])["id"].count()
+df_orisol_d = df_orisol_d.reset_index()
+df_orisol_d['Count of Rework'] = df_orisol_d['id']
+df_orisol_d = df_orisol_d.drop(['id'], axis=1)
+
+
+#set params to main idash
+
+idf_o = df_orisol.interactive()
+mfr_o = pn.widgets.RadioButtonGroup(
+    name='Value Stream', 
+    options=['White', 'Red','Blue','Green'],
+    button_type='success'
+)
+yaxis_o = pn.widgets.RadioButtonGroup(
+    name='Rework Count', 
+    options=['id'],
+    button_type='success'
+)
+
+idf_oi = df_grouped_d.interactive()
+
+
+#set select panel widget
+value_streams = list(df_orisol_d['Value Stream'].unique())
+select = pn.widgets.Select(name = 'Select Value Stream', options = value_streams)
+
+#create scatter plot
+def create_plot(value_stream):
+    return df_orisol_d[df_orisol_d['Value Stream'] == value_stream].hvplot.scatter('Time Recorded', 'Count of Rework')
+
+layout = pn.Column(pn.Column(select), create_plot(select.options[0]))
+
+def update(event):
+    layout[1].object = create_plot(select.value)
+    
+select.param.watch(update, 'value')
+layout.servable()
+
+
+#load panel explorer
+hvexplorer = hvplot.explorer(df_orisol_d)
+hvexplorer.servable()
+
+
+#set select panel widgets
+#value_streams = list(df_orisol_d['Value Stream'].unique())
+#select = pn.widgets.Select(name = 'Select Value Stream', options = value_streams)
+
+#define radio button widgets
+radio_buttons = pn.widgets.RadioButtonGroup(options = ['Scatter', 'Table', 'Explorer'])
+
+hvexplorer = hvplot.explorer(df_orisol_d, height=700, width=500)
+hvexplorer.servable()
+
+def create_plot(value_stream):
+    return df_orisol_d[df_orisol_d['Value Stream'] == value_stream].hvplot.scatter('Time Recorded', 'Count of Rework')
+    
+#widget/panel interaction
+@pn.depends(radio_buttons)
+
+def chart_type(x):
+    if x == 'Explorer':
+        return hvexplorer
+    elif x == 'Scatter':
+        return df_orisol_d.hvplot.scatter('Time Recorded', 'Count of Rework', by='Value Stream', height=700, width=500)
+    elif x == 'Table':
+        return idf_oi
+
+interact(chart_type, x = radio_buttons)
+
+
+#set params to main idash
+
+idf_o = df_orisol.interactive()
+factories = list(df_orisol['Factory '].unique())
+mfr_o = pn.widgets.RadioButtonGroup(
+    name='Factory', 
+    options=factories,
+    button_type='success'
+)
+
+
+#pipeline to idash
+#data in tabular format
+
+ipipeline_o = (
+    idf_o
+    .groupby(['Value Stream'])[yaxis_o].count()
+    .to_frame()
+    .reset_index()  
+    .reset_index(drop=True)
+)
+#itable_o = ipipeline_o.pipe(pn.widgets.Tabulator, pagination='remote', page_size=10)
+
+
+#server
+
+template = pn.template.FastListTemplate(
+    title='Demo Manufacturing Data WebApp', 
+    sidebar=['Factory', mfr_o],
+    main=[interact(chart_type, x = radio_buttons)],
+    accent_base_color="#88d8b0",
+    header_background="#dc484c",
+)
+template.show()
+template.servable();
+
+
