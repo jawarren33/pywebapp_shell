@@ -1,0 +1,85 @@
+#!/usr/bin/env python
+# coding: utf-8
+
+import hvplot.pandas
+import holoviews as hv
+import panel as pn
+from panel.interact import interact
+
+pn.extension('tabulator', sizing_mode = "stretch_width")
+
+hv.extension("bokeh")
+
+
+def environment():
+    try:
+        get_ipython()
+        return "notebook"
+    except:
+        return "server"
+
+
+PALETTE = ["#ff6f69", "#ffcc5c", "#88d8b0", ]
+pn.Row(
+    pn.layout.HSpacer(height=50, background=PALETTE[0]),
+    pn.layout.HSpacer(height=50, background=PALETTE[1]),
+    pn.layout.HSpacer(height=50, background=PALETTE[2]),
+)
+
+
+#load local files (csv)
+
+import pandas as pd
+df_gl6h = pd.read_csv('/Users/jamie.warren/Downloads/export-990GL6 Heel-products.csv', header = 0)
+df_gl6e = pd.read_csv('/Users/jamie.warren/Downloads/export-990GL6 Encap-products.csv', header = 0)
+df_gl6m = pd.read_csv('/Users/jamie.warren/Downloads/export-990GL6 Midsole-products.csv', header = 0)
+
+frames = [df_gl6h, df_gl6e, df_gl6m]
+df = pd.concat(frames)
+
+#set params to main idash
+
+idf = df.interactive()
+mfr = pn.widgets.RadioButtonGroup(
+    name='Area', 
+    options=['Heel', 'Midsole','Encap'],
+    button_type='success'
+)
+yaxis = pn.widgets.RadioButtonGroup(
+    name='LAB', 
+    options=['color.0.d50L', 'color.0.d50a','color.0.d50b'],
+    button_type='success'
+)
+
+
+#pipeline to idash
+#data in tabular format
+
+ipipeline = (
+    idf
+    .groupby(['area','model'])[yaxis].mean()
+    .to_frame()
+    .reset_index()  
+    .reset_index(drop=True)
+)
+itable = ipipeline.pipe(pn.widgets.Tabulator, pagination='remote', page_size=10)
+
+
+
+#create plots
+
+ihvplot = ipipeline.hvplot.bar(x= 'area', y=yaxis,  color="#663399", line_width=3, height=500)
+#ihvplot = df_gl6h.hvplot.box(y='color.0.d50L', by='area', height=700, width=500, legend=False)
+
+#server
+
+template = pn.template.FastListTemplate(
+    title='Incoming Materials Inspection Color Testing', 
+    sidebar=['Areas', mfr, 'Y axis' , yaxis],
+    main=[ihvplot.panel(), itable.panel()],
+    accent_base_color="#88d8b0",
+    header_background="#dc484c",
+)
+template.show()
+template.servable();
+
